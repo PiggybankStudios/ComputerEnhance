@@ -1,0 +1,16 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"folder_exclude_patterns": [
+				"*/target/",
+			],
+			"file_exclude_patterns": [
+				"homework/ch01_01/listings/listing37",
+				"homework/ch01_01/listings/listing38",
+				"Cargo.lock",
+			],
+		}
+	]
+}
