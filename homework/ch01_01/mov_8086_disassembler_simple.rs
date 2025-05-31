@@ -85,7 +85,6 @@ fn main()
 			
 			if (mode == _8086_MOV_MOD_REG_TO_REG)
 			{
-				// TODO: Idk why we have to swap the order of r_m and reg in order to match the input .asm file!
 				println!("mov {}, {}", get_reg_name(dst, w), get_reg_name(src, w));
 			}
 			else
