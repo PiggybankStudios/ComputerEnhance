@@ -1,10 +1,10 @@
 [package]
 name = "disassembler"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [[bin]]
 name = "disassembler"
-path = "mov_8086_disassembler_simple.rs"
+path = "mov_8086_disassembler.rs"
 
 [dependencies]
