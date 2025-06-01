@@ -9,6 +9,8 @@
 			"file_exclude_patterns": [
 				"homework/ch01_01/listings/listing37",
 				"homework/ch01_01/listings/listing38",
+				"homework/ch01_02/listings/listing39",
+				"homework/ch01_02/listings/listing40",
 				"Cargo.lock",
 			],
 		}

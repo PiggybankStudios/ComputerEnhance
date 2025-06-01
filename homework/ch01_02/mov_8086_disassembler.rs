@@ -4,8 +4,9 @@ use std::env;
 use std::fs;
 use std::io::Read;
 use std::process::exit;
+// use std::fmt;
 
-const DO_SECOND_LISTING: bool = false;
+const DO_SECOND_LISTING: bool = true;
 
 // const BIT7_MASK:    u8 = 0b10000000;
 // const BIT6_MASK:    u8 = 0b01000000;
@@ -23,8 +24,9 @@ const _8086_OP_MASK7: u8 = 0b11111110; const _8086_OP_SHIFT7: u8 = 1;
 
 const _8086_MOV_IM_REG_OPCODE:        u8 = 0b1011; //Immediate to register
 const _8086_MOV_REGMEM_REGMEM_OPCODE: u8 = 0b100010; //Register/memory to/from register
-const _8086_MOV_IM_MEM_OPCODE:        u8 = 0b1100011; //Immediate to register/memory
+const _8086_MOV_IM_REGMEM_OPCODE:     u8 = 0b1100011; //Immediate to register/memory
 const _8086_MOV_MEM_ACCUM_OPCODE:     u8 = 0b1010000; //Memory to accumulator
+const _8086_MOV_ACCUM_MEM_OPCODE:     u8 = 0b1010001; //Accumulator to memory
 
 const _8086_MOV_MOD_MASK:           u8 = 0b11000000; const _8086_MOV_MOD_SHIFT: u8 = 6;
 const _8086_MOV_MOD_MEM_0BIT:       u8 = 0b00; //no offset bytes (except for if R/M is DIRECT ADDRESS)
@@ -154,6 +156,8 @@ fn main()
 				disp = ((disp_hi as u16) << 8) | (disp_lo as u16);
 			}
 			
+			let reg_name: String = get_reg_name(reg, w).to_string();
+			
 			if (mode == _8086_MOV_MOD_REG_TO_REG)
 			{
 				let dst = if d {reg} else {r_m};
@@ -162,37 +166,26 @@ fn main()
 			}
 			else if (mode == _8086_MOV_MOD_MEM_0BIT && r_m != _8086_MOV_EFF_ADDR_EQ_DIRECT)
 			{
-				//TODO: We probably want to merge all these if (d) else blocks by doing some sort of format on each operand and then printing them out one way or the other
-				if (d) //if writing to register
-				{
-					println!("mov {}, [{}]", get_reg_name(reg, w), get_effective_address_equation_str(r_m));
-				}
-				else //else writing to memory
-				{
-					println!("mov [{}], {}", get_effective_address_equation_str(r_m), get_reg_name(reg, w));
-				}
+				let mem_string: String = format!("[{}]", get_effective_address_equation_str(r_m));
+				let dst = if d {&reg_name} else {&mem_string};
+				let src = if d {&mem_string} else {&reg_name};
+				println!("mov {}, {}", *dst, *src);
 			}
 			else if (mode == _8086_MOV_MOD_MEM_0BIT && r_m == _8086_MOV_EFF_ADDR_EQ_DIRECT)
 			{
-				if (d) //if writing to register
-				{
-					println!("mov {}, [{}]", get_reg_name(reg, w), disp);
-				}
-				else //else writing to memory
-				{
-					println!("mov [{}], {}", disp, get_reg_name(reg, w));
-				}
+				let mem_string: String = format!("[{}]", disp);
+				let dst = if d {&reg_name} else {&mem_string};
+				let src = if d {&mem_string} else {&reg_name};
+				println!("mov {}, {}", *dst, *src);
 			}
 			else if (mode == _8086_MOV_MOD_MEM_8BIT || mode == _8086_MOV_MOD_MEM_16BIT)
 			{
-				if (d) //if writing to register
-				{
-					println!("mov {}, [{}+{}]", get_reg_name(reg, w), get_effective_address_equation_str(r_m), disp);
-				}
-				else //else writing to memory
-				{
-					println!("mov [{}+{}], {}", get_effective_address_equation_str(r_m), disp, get_reg_name(reg, w));
-				}
+				let mem_string: String =
+					if disp != 0 { format!("[{}+{}]", get_effective_address_equation_str(r_m), disp) } 
+					else { format!("[{}]", get_effective_address_equation_str(r_m)) };
+				let dst = if d {&reg_name} else {&mem_string};
+				let src = if d {&mem_string} else {&reg_name};
+				println!("mov {}, {}", *dst, *src);
 			}
 			else
 			{
@@ -200,13 +193,87 @@ fn main()
 				println!("mov({:02b}) {:03b}, {:03b}", mode, reg, r_m);
 			}
 		}
-		else if (opcode7 == _8086_MOV_IM_MEM_OPCODE)
+		else if (opcode7 == _8086_MOV_IM_REGMEM_OPCODE)
 		{
-			println!("mov immediate to memory...");
+			let w: bool = ((byte & BIT0_MASK) != 0);
+			
+			bIndex += 1;
+			let next_byte = *buffer.get(bIndex).expect("MOV opcode expected 1 more byte, but we reached the end of the file!");
+			let mode = ((next_byte & _8086_MOV_MOD_MASK) >> _8086_MOV_MOD_SHIFT);
+			let r_m = ((next_byte & _8086_MOV_R_M_MASK) >> _8086_MOV_R_M_SHIFT);
+			
+			//TODO: This else if basically matches the above else if, we probably should merge them in some way
+			
+			let mut disp: u16 = 0x0000; //offset value in effective address calculation
+			if (mode == _8086_MOV_MOD_MEM_8BIT)
+			{
+				bIndex += 1; disp = (*buffer.get(bIndex).expect("MOV opcode expected 2 more bytes, but we reached the end of the file!")) as u16;
+			}
+			else if (mode == _8086_MOV_MOD_MEM_16BIT || (mode == _8086_MOV_MOD_MEM_0BIT && r_m == _8086_MOV_EFF_ADDR_EQ_DIRECT))
+			{
+				bIndex += 1; let disp_lo: u8 = *buffer.get(bIndex).expect("MOV opcode expected 3 more bytes, but we reached the end of the file!");
+				bIndex += 1; let disp_hi: u8 = *buffer.get(bIndex).expect("MOV opcode expected 3 more bytes, but we reached the end of the file!");
+				disp = ((disp_hi as u16) << 8) | (disp_lo as u16);
+			}
+			
+			let mut immediate_data: u16 = 0x0000;
+			if w
+			{
+				bIndex += 1; let data_lo: u8 = *buffer.get(bIndex).expect("MOV opcode expected 2 more bytes, but we reached the end of the file!");
+				bIndex += 1; let data_hi: u8 = *buffer.get(bIndex).expect("MOV opcode expected 2 more bytes, but we reached the end of the file!");
+				immediate_data = ((data_hi as u16) << 8) | (data_lo as u16);
+			}
+			else
+			{
+				bIndex += 1; immediate_data = (*buffer.get(bIndex).expect("MOV opcode expected 1 more bytes, but we reached the end of the file!")) as u16;
+			}
+			
+			let mut immediate_str = format!("{}", immediate_data);
+			if (mode != _8086_MOV_MOD_REG_TO_REG)
+			{
+				immediate_str = format!("{} {}", if w {"word"} else {"byte"}, immediate_str);
+			}
+			
+			if (mode == _8086_MOV_MOD_REG_TO_REG)
+			{
+				println!("mov {}, {}", get_reg_name(r_m, w), immediate_str);
+			}
+			else if (mode == _8086_MOV_MOD_MEM_0BIT && r_m != _8086_MOV_EFF_ADDR_EQ_DIRECT)
+			{
+				println!("mov [{}], {}", get_effective_address_equation_str(r_m), immediate_str);
+			}
+			else if (mode == _8086_MOV_MOD_MEM_0BIT && r_m == _8086_MOV_EFF_ADDR_EQ_DIRECT)
+			{
+				println!("mov [{}], {}", disp, immediate_str);
+			}
+			else if (mode == _8086_MOV_MOD_MEM_8BIT || mode == _8086_MOV_MOD_MEM_16BIT)
+			{
+				let mem_string: String =
+					if disp != 0 { format!("[{}+{}]", get_effective_address_equation_str(r_m), disp) } 
+					else { format!("[{}]", get_effective_address_equation_str(r_m)) };
+				println!("mov {}, {}", mem_string, immediate_str);
+			}
+			else
+			{
+				// Unhandled mod value, probably means to read/write to memory or immediate
+				println!("mov({:02b}) {:03b}", mode, r_m);
+			}
 		}
-		else if (opcode7 == _8086_MOV_MEM_ACCUM_OPCODE)
+		else if (opcode7 == _8086_MOV_MEM_ACCUM_OPCODE || opcode7 == _8086_MOV_ACCUM_MEM_OPCODE)
 		{
-			println!("mov memory to accumulator...");
+			let w: bool = ((byte & BIT0_MASK) != 0);
+			let mem_is_dst: bool = (opcode7 == _8086_MOV_ACCUM_MEM_OPCODE);
+			
+			bIndex += 1; let addr_lo: u8 = *buffer.get(bIndex).expect("MOV expected 2 more bytes, but we reached the end of the file!");
+			bIndex += 1; let addr_hi: u8 = *buffer.get(bIndex).expect("MOV expected 2 more bytes, but we reached the end of the file!");
+			let address: u16 = ((addr_hi as u16) << 8) | (addr_lo as u16);
+			
+			let address_str = format!("[{}]", address);
+			//NOTE: When w is 0 are we assuming we are writing the lower bits of the a register. We cannot access ah with these accumulator opcodes
+			let reg_name = get_reg_name(_8086_MOV_REG_AX_AL, w).to_string();
+			let dst = if mem_is_dst {&address_str} else {&reg_name};
+			let src = if mem_is_dst {&reg_name} else {&address_str};
+			println!("mov {}, {}", *dst, *src);
 		}
 		else
 		{
